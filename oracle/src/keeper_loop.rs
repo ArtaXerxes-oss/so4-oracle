@@ -11,6 +11,8 @@ use crate::chain::tx_builder;
 use crate::keeper;
 use crate::state::{AppState, CachedPrice, FailedSubmission, KeeperExecution};
 
+const PRICE_HEARTBEAT_INTERVAL_SECS: u64 = 30;
+
 impl std::error::Error for SequenceFetchError {}
 
 impl crate::retry::Retryable for SequenceFetchError {
@@ -208,8 +210,15 @@ async fn execute_keeper_cycle(state: Arc<AppState>) -> Result<CycleSummary, Stri
     };
 
     if !prices_stale {
-        let tx_hash = set_prices_on_chain(&state, &prices).await?;
-        info!(hash = %tx_hash, "set_prices_confirmed");
+        let now = crate::current_timestamp_secs();
+        let is_heartbeat = is_heartbeat_due(&state, now);
+        let submit_prices = filter_prices_by_threshold(&state, &prices, now, is_heartbeat);
+        if !submit_prices.is_empty() || is_heartbeat {
+            let prices_to_submit = if is_heartbeat { prices.clone() } else { submit_prices };
+            let tx_hash = set_prices_on_chain(&state, &prices_to_submit).await?;
+            info!(hash = %tx_hash, "set_prices_confirmed");
+            update_submitted_prices(&state, &prices_to_submit, now, is_heartbeat).await;
+        }
         tokio::time::sleep(Duration::from_millis(5000)).await;
 
         for order_key in &order_keys {
@@ -621,6 +630,72 @@ async fn set_prices_on_chain(
 
     info!(ledger, "set_prices confirmed on ledger");
     Ok(format!("confirmed on ledger {ledger}"))
+}
+
+async fn is_heartbeat_due(state: &Arc<AppState>, now: u64) -> bool {
+    let cache = state.price_cache.read().await;
+    match cache.last_full_submission {
+        Some(last) => {
+            let elapsed = now.saturating_sub(last.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs()));
+            elapsed >= PRICE_HEARTBEAT_INTERVAL_SECS
+        }
+        None => true,
+    }
+}
+
+async fn filter_prices_by_threshold(
+    state: &Arc<AppState>,
+    prices: &BTreeMap<String, CachedPrice>,
+    now: u64,
+    is_heartbeat: bool,
+) -> BTreeMap<String, CachedPrice> {
+    let cache = state.price_cache.read().await;
+    let last_submitted = cache.last_submitted_medians.as_ref();
+    drop(cache);
+
+    let token_thresholds: std::collections::HashMap<String, u32> = state
+        .config
+        .price_feed
+        .tokens
+        .iter()
+        .map(|t| (t.symbol.clone(), t.submit_threshold_bps))
+        .collect();
+
+    prices
+        .iter()
+        .filter(|(symbol, price)| {
+            if is_heartbeat {
+                return true;
+            }
+            let threshold = token_thresholds.get(symbol).copied().unwrap_or(0);
+            let last_median = last_submitted.and_then(|m| m.get(*symbol)).copied();
+            match (last_median, threshold) {
+                (Some(last), 0) => true,
+                (Some(last), thresh) => {
+                    let change = (price.median - last).abs();
+                    change > (thresh as i128)
+                }
+                (None, _) => true,
+            }
+        })
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
+}
+
+async fn update_submitted_prices(state: &Arc<AppState>, prices: &BTreeMap<String, CachedPrice>, now: u64, is_heartbeat: bool) {
+    let mut cache = state.price_cache.write().await;
+    let now_time = SystemTime::UNIX_EPOCH + Duration::from_secs(now);
+    if is_heartbeat {
+        cache.last_full_submission = Some(now_time);
+        cache.last_submitted_medians = Some(
+            prices.iter().map(|(s, p)| (s.clone(), p.median)).collect()
+        );
+    } else {
+        let submitted = cache.last_submitted_medians.get_or_insert_with(BTreeMap::new);
+        for (s, p) in prices {
+            submitted.insert(s.clone(), p.median);
+        }
+    }
 }
 
 /// True if `error` indicates the submitted transaction was rejected for
