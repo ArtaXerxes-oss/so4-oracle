@@ -76,8 +76,9 @@ pub fn aggregate_prices(
         }
     }
 
-    let props = compute_confidence_interval_with_spread(&cluster.filtered_prices, max_deviation_bps)
-        .ok_or_else(|| "cannot compute confidence interval".to_string())?;
+    let props =
+        compute_confidence_interval_with_spread(&cluster.filtered_prices, max_deviation_bps)
+            .ok_or_else(|| "cannot compute confidence interval".to_string())?;
     let median = compute_median_allow_single(&cluster.filtered_prices).unwrap_or(props.min);
 
     let rejected_sources = filter_result
@@ -653,7 +654,9 @@ mod tests {
         ];
         let result = aggregate_prices(&[100, 101, 1000], &sources, 3, 200);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("insufficient sources in consistent cluster"));
+        assert!(result
+            .unwrap_err()
+            .contains("insufficient sources in consistent cluster"));
     }
 
     #[test]
@@ -758,7 +761,9 @@ mod tests {
         let sources = vec!["src1".to_string(), "src2".to_string(), "src3".to_string()];
         let result = aggregate_prices(&prices, &sources, 3, 500);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("insufficient sources in consistent cluster"));
+        assert!(result
+            .unwrap_err()
+            .contains("insufficient sources in consistent cluster"));
     }
 
     #[test]
@@ -766,7 +771,12 @@ mod tests {
         // 4 sources, min_sources=2. Three honest at [100, 101, 99], one bad at 1000
         // Honest cluster size 3 > min_sources, should succeed with honest median
         let prices = vec![100, 101, 99, 1000];
-        let sources = vec!["src1".to_string(), "src2".to_string(), "src3".to_string(), "bad".to_string()];
+        let sources = vec![
+            "src1".to_string(),
+            "src2".to_string(),
+            "src3".to_string(),
+            "bad".to_string(),
+        ];
         let result = aggregate_prices(&prices, &sources, 2, 500).unwrap();
         assert_eq!(result.sources_used.len(), 3);
         assert_eq!(result.median, 100); // median of [99, 100, 101]

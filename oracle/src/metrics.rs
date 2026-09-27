@@ -110,7 +110,8 @@ impl Metrics {
         self.submit_failures
             .fetch_add(errors as u64, Ordering::Relaxed);
         if keeper_balance_low {
-            self.keeper_balance_low_count.fetch_add(1, Ordering::Relaxed);
+            self.keeper_balance_low_count
+                .fetch_add(1, Ordering::Relaxed);
         }
         if prices_stale {
             self.prices_stale_count.fetch_add(1, Ordering::Relaxed);
@@ -374,7 +375,9 @@ impl Metrics {
             self.keeper_balance_low_count.load(Ordering::Relaxed)
         ));
 
-        output.push_str("# HELP oracle_prices_stale_count Total number of cycles with stale prices\n");
+        output.push_str(
+            "# HELP oracle_prices_stale_count Total number of cycles with stale prices\n",
+        );
         output.push_str("# TYPE oracle_prices_stale_count counter\n");
         output.push_str(&format!(
             "oracle_prices_stale_count {}\n",

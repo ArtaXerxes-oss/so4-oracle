@@ -125,7 +125,11 @@ async fn execute_keeper_cycle(state: Arc<AppState>) -> Result<CycleSummary, Stri
         Ok(stroops) => {
             let xlm = stroops as f64 / keeper::XLM_IN_STROOPS as f64;
             if xlm < state.config.min_keeper_balance_xlm {
-                warn!(balance_xlm = xlm, min_balance_xlm = state.config.min_keeper_balance_xlm, "keeper_balance_low; skipping submissions this cycle");
+                warn!(
+                    balance_xlm = xlm,
+                    min_balance_xlm = state.config.min_keeper_balance_xlm,
+                    "keeper_balance_low; skipping submissions this cycle"
+                );
                 true
             } else {
                 false
