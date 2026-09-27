@@ -19,8 +19,9 @@ name = "oracle"
 path = "src/main.rs"
 
 [dependencies]
-axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "test-util"] }
+futures = "0.3"
 tokio-util = "0.7"
 # request-id/catch-panic/set-header gate the modules api/mod.rs builds its
 # middleware stack from; `query` on reqwest gates `RequestBuilder::query`,
