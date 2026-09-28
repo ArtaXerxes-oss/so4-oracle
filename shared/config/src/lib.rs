@@ -144,6 +144,7 @@ pub fn parse_token_configs(raw: &str) -> Result<Vec<TokenConfig>, ConfigError> {
     }
 
     let mut symbols_seen = std::collections::HashSet::new();
+    let mut stellar_addresses_seen = std::collections::HashSet::new();
     let mut pyth_feed_ids_seen = std::collections::HashSet::new();
     let mut binance_symbols_seen = std::collections::HashSet::new();
     let mut coinbase_symbols_seen = std::collections::HashSet::new();
@@ -160,6 +161,16 @@ pub fn parse_token_configs(raw: &str) -> Result<Vec<TokenConfig>, ConfigError> {
                 symbol: token.symbol.clone(),
                 reason: "duplicate symbol (case-insensitive)".to_string(),
             });
+        }
+        // Validate stellar_address uniqueness (#872).
+        if !token.stellar_address.is_empty() {
+            let lower_address = token.stellar_address.to_lowercase();
+            if !stellar_addresses_seen.insert(lower_address) {
+                return Err(ConfigError::InvalidToken {
+                    symbol: token.symbol.clone(),
+                    reason: "duplicate stellar_address (case-insensitive)".to_string(),
+                });
+            }
         }
         // stellar_address and sources are optional for the API server path,
         // but required for the oracle path — the oracle validates separately.
@@ -503,4 +514,31 @@ mod tests {
         ]"#;
         assert!(parse_token_configs(json).is_ok());
     }
+}
+
+// #872 — duplicate stellar_address (case-insensitive) must be rejected.
+#[test]
+fn reject_duplicate_stellar_address() {
+    let json = r#"[
+            {"symbol":"TWBTC","stellar_address":"CBTCADDR","sources":["binance"]},
+            {"symbol":"TWETH","stellar_address":"cbtcaddr","sources":["coinbase"]}
+        ]"#;
+    let err = parse_token_configs(json).unwrap_err();
+    match err {
+        ConfigError::InvalidToken { symbol, reason } => {
+            assert_eq!(symbol, "TWETH");
+            assert_eq!(reason, "duplicate stellar_address (case-insensitive)");
+        }
+        _ => panic!("expected ConfigError::InvalidToken for duplicate stellar_address"),
+    }
+}
+
+// #872 — empty stellar_address values should not trigger duplicate check.
+#[test]
+fn allow_multiple_empty_stellar_addresses() {
+    let json = r#"[
+            {"symbol":"BTC","stellar_address":"","sources":["binance"]},
+            {"symbol":"ETH","stellar_address":"","sources":["coinbase"]}
+        ]"#;
+    assert!(parse_token_configs(json).is_ok());
 }

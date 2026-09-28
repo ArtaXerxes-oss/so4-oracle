@@ -79,7 +79,12 @@ impl FromRequestParts<Arc<AppState>> for AdminAuth {
             .and_then(|value| value.strip_prefix("Bearer "));
 
         match actual {
-            Some(actual) if crate::auth::constant_time_eq(actual.as_bytes(), expected.as_str().as_bytes()) => {
+            Some(actual)
+                if crate::auth::constant_time_eq(
+                    actual.as_bytes(),
+                    expected.as_str().as_bytes(),
+                ) =>
+            {
                 Ok(AdminAuth)
             }
             _ => {
@@ -305,7 +310,6 @@ mod tests {
             );
         }
     }
-
 
     // #1029 — a wrong HTTP method on a known route must return the API's JSON
     // error envelope, not axum's bare 405.
