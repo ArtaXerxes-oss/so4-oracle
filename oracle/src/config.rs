@@ -521,7 +521,7 @@ fn validate_hex_key(
 /// Validate a Stellar strkey (account `G…` / secret seed `S…`) for shape only:
 /// 56-char base32 with the expected version prefix. This catches typos and
 /// swapped vars at boot; it does not verify the CRC16 or that a secret derives
-/// the configured account (those are wired with the keeper in #3).
+/// the configured account (those are tracked in the keeper module).
 fn validate_strkey(var: &'static str, value: String, prefix: char) -> Result<String, EnvError> {
     let invalid = |reason: String| EnvError::InvalidVar { var, reason };
     if value.len() != 56 {
@@ -550,7 +550,7 @@ fn load_price_feed_config(raw: Option<&str>) -> Result<PriceFeedConfig, ConfigEr
 ///
 /// Expected format:
 /// ```json
-/// [{"symbol":"BTC","stellar_address":"C...","sources":["binance","coinbase"]}]
+/// [{"symbol":"BTC","stellar_address":"C...","sources":["binance","coinbase"],"binance_symbol":"BTCUSDT","coinbase_symbol":"BTC"}]
 /// ```
 pub fn parse_price_feed_config(raw: &str) -> Result<PriceFeedConfig, ConfigError> {
     let tokens = shared_config::parse_token_configs(raw)?;
